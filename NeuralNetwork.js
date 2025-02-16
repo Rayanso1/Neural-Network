@@ -8,11 +8,11 @@ const L2_biases = [0, 0, 0, 0, 0]
 
 const L1_weights = [
 
-    [0.2, 0.92, 0.5, 0.2, 0.3],
-    [0.3, 0.3, 0.3, 0.23, 0.2],
-    [0.2, 0.2, 1, 1, 0.4],
+    [-0.2, 0.92, -0.5, 0.2, -0.3],
+    [0.3, 0.3, -0.3, -0.23, 0.2],
+    [0.2, -0.2, -1, 1, -0.4],
     [0, 0, 0, 0, 0],
-    [0.9, 0.1, 0.9, 0.2, 0.1],
+    [-0.9, 0.1, -0.9, -0.2, 0.1],
 
 ]
 
@@ -41,165 +41,160 @@ function scaling_function_derivative(x) {
 
 }
 
-function single_node_calculator(array_neuron, bias_index, biases=L1_biases, inputs=L0_inputs, n=0, base_sum=0) {
+function single_node_calculator(weights, bias_index, biases=L1_biases, inputs=L0_inputs, n=0, base_sum=0) {
 
-    if (n < array_neuron.length) {
+    if (n < weights.length) {
 
-        let intermetiate_sum = (base_sum + (array_neuron[n]*inputs[n]))
+        let intermetiate_sum = (base_sum + (weights[n]*inputs[n]))
 
-        return(single_node_calculator(array_neuron, bias_index, biases, inputs, n+1, intermetiate_sum))
+        return(single_node_calculator(weights, bias_index, biases, inputs, n+1, intermetiate_sum))
     }
 
     return(scaling_function(base_sum + biases[bias_index]))
 
 }
 
-let second_layer_inputs = []
-L1_weights.forEach((array_neuron, index) => (second_layer_inputs.push(single_node_calculator(array_neuron, index, L1_biases, L0_inputs))))
-
-const L1_inputs = second_layer_inputs
-
-function neural_training(array_list_weights, biases, inputs, iterations, real_results=real_values) {
+function L1_and_L2_neural_training(L1_weights, L2_weights, L1_biases, L2_biases, inputs, target_values, iterations) {
 
     if (iterations > 0) {
-
-        let results = []
-
-        array_list_weights.forEach((array_neuron, index) => 
-    
-            {
         
-            results.push(single_node_calculator(array_neuron, index, biases, inputs))
+        let L1_results = []
 
-            });
+        L1_weights.forEach((placeholder, index) => {
 
-        console.log(results)
+            L1_results.push(single_node_calculator(L1_weights[index], index, L1_biases, inputs))
 
-        let result_derivatives_biases = []
-        let weights_derivatives = [[], [], [], [], []]
+        })
 
-        results.forEach((placeholder,index) => 
-            
-            {
+        let L2_results = []
+
+        L2_weights.forEach((placeholder, index) => {
+
+            L2_results.push(single_node_calculator(L2_weights[index], index, L2_biases, L1_results))
+
+        })
+        console.log(L2_results)
+
+        let L2_biases_derivatives = []
+        let L2_weights_derivatives = [[], [], [], [], []]
+
+        let L1_results_derivatives = []
+        let L1_biases_derivatives = []
+        let L1_weights_derivatives = [[], [], [], [], []]
+
+        L2_biases.forEach((placeholder, index) => {
 
             let node_index = index
-            let intermidiate_derivative = 0
+            let intermediate_derivative = 0
 
-            results.forEach((placeholder,index) => 
-    
-                {
-        
+            L2_weights[index].forEach((placeholder, index) => {
+
                 let c_index = index
-                    
+                intermediate_derivative += eval(scaling_function_derivative((L2_weights[node_index])[c_index] * L1_results[c_index] + L2_biases[node_index])*2*(L2_results[c_index] - target_values[c_index]))
 
-                intermidiate_derivative += (eval(scaling_function_derivative((array_list_weights[node_index])[c_index] * inputs[c_index] + biases[node_index])*2*(results[c_index] - real_results[c_index])))
-        
-                });
-
-            result_derivatives_biases.push(intermidiate_derivative/(biases.length))
-
-        }),
-        
-        results.forEach((placeholder,index) => 
+            })
             
-            {
-        
+            L2_biases_derivatives.push(intermediate_derivative/L2_weights[node_index].length)
+        })
+
+        L2_weights.forEach((placeholder, index) => {
+
+            let node_index = index
+
+            L2_weights[index].forEach((placeholder, index) => {
+
+                let c_index = index
+
+                L2_weights_derivatives[node_index].push(L1_results[c_index]  *  scaling_function_derivative((L2_weights[node_index])[c_index] * L1_results[c_index] + L2_biases[node_index] )  *  2*(L2_results[node_index] - target_values[node_index]))
+
+            })
+        })
+
+        L2_weights.forEach((placeholder, index) => {
+
+            let intermediate_derivative = 0
             let node_index = index
         
-            results.forEach((placeholder,index) => 
+            L2_weights[node_index].forEach((placeholder, index) => {
             
-                {
+                let c_index = index 
+                intermediate_derivative += (eval(L2_weights[node_index][c_index] * scaling_function_derivative(L2_weights[node_index][c_index] * L1_results[c_index] + L1_biases[node_index]) *2*(L2_results[node_index] - target_values[node_index])))
         
+            })
+        
+            L1_results_derivatives.push(intermediate_derivative/L2_weights[node_index].length)
+        })
+        
+        L1_weights.forEach((placeholder, index) => {
+
+            let node_index = index
+            let intermediate_derivative = 0
+
+            L1_weights[node_index].forEach((placeholder, index) => {
+
                 let c_index = index
 
-                weights_derivatives[node_index].push(eval(inputs[c_index]  *  scaling_function_derivative((array_list_weights[node_index])[c_index] * inputs[c_index] + biases[node_index] )  *  2*(results[node_index] - real_results[node_index])))
-                
-                });
-            
-            });
-
-        let new_biases = []
-        let new_weights = [[], [], [], [], []]
-                
-        weights_derivatives.forEach((placeholder,index) => {
-
-            let list_index = index
-
-            weights_derivatives[list_index].forEach((placeholder, index) => {
-
-                let list_list_index = index
-
-                new_weights[index].push((array_list_weights[list_index])[list_list_index] - (eta * weights_derivatives[list_index][list_list_index]))
+                intermediate_derivative += (eval(scaling_function_derivative((L1_weights[node_index])[c_index] * inputs[c_index] + L1_biases[node_index])*2*(L1_results_derivatives[node_index])))
 
             })
 
-        }
-        )
+            L1_biases_derivatives.push(intermediate_derivative/L1_weights[node_index].length)
+        })
 
-        result_derivatives_biases.forEach((placeholder,index) => {
+        L1_weights.forEach((placeholder, index) => {
 
-            new_biases.push(biases[index] - (eta*(result_derivatives_biases[index])))
-        }
-        )
+            let node_index = index
 
-        return(neural_training(new_weights, new_biases, inputs, iterations-1))
+            L1_weights[node_index].forEach((placeholder, index) => {
+
+                let c_index = index
+
+                L1_weights_derivatives[node_index].push(eval(inputs[c_index]  *  scaling_function_derivative((L1_weights[node_index])[c_index] * inputs[c_index] + L1_biases[node_index] )  *  2*(L1_results_derivatives[node_index])))
+
+            })
+        })
+
+        let new_L2_weights = [[], [], [], [], []]
+        let new_L1_weights = [[], [], [], [], []]
+        let new_L2_biases = []
+        let new_L1_biases = []
+
+        L2_weights_derivatives.forEach((placeholder, index) => {
+
+            let node_index = index
+            L2_weights_derivatives[node_index].forEach((placeholder, index) => {new_L2_weights[node_index].push(L2_weights[node_index][index] - eta * L2_weights_derivatives[node_index][index])})
+
+        })
+
+        L1_weights_derivatives.forEach((placeholder, index) => {
+
+            let node_index = index
+            L1_weights_derivatives[node_index].forEach((placeholder, index) => {new_L1_weights[node_index].push(L1_weights[node_index][index] - eta * L1_weights_derivatives[node_index][index])})
+
+        })
+
+        L2_biases_derivatives.forEach((derivative, index) => {new_L2_biases.push(L2_biases[index] - eta * derivative)})
+
+        L1_biases_derivatives.forEach((derivative, index) => {new_L1_biases.push(L1_biases[index] - eta * derivative)})
+
+        return(L1_and_L2_neural_training(new_L1_weights, new_L2_weights, new_L1_biases, new_L2_biases, inputs, target_values, iterations-1))
 
     }
 
     return{
-        weights: array_list_weights,
-        biases: biases
-    }
+        L1_biases: L1_biases,
+        L2_biases: L2_biases,
 
-    
+        L1_weights: L1_weights,
+        L2_weights: L2_weights,
+    }
 
 }
 
 console.time()
-let trained_w_and_b = neural_training(L2_weights, L2_biases, L0_inputs, 5000)
+let trained_w_and_b_L1_L2 = L1_and_L2_neural_training(L1_weights, L2_weights, L1_biases, L2_biases, L0_inputs, real_values, 5000)
 console.timeEnd()
 
-let final_results = []
+console.log("\x1b[31m%s\x1b[0m","real values: ", real_values)
 
-trained_w_and_b.weights.forEach((array_neuron, index) => 
-    
-    {
-    
-    final_results.push(Number(single_node_calculator(array_neuron, index, trained_w_and_b.biases).toFixed(3)))
-
-    });
-
-console.log("rounded final resutls: ")
-console.log(final_results)
-console.log(trained_w_and_b)
-
-let L1_inputs_derivative = []
-
-let first_results = []
-
-L1_weights.forEach((array_neuron, index) => 
-    
-    {
-    
-    first_results.push(single_node_calculator(array_neuron, index, L1_biases))
-
-    });
-
-trained_w_and_b.weights.forEach((placeholder, index) => {
-
-    let intermediate_derivative = 0
-    let node_index = index
-
-    trained_w_and_b.weights[node_index].forEach((placeholder, index) => {
-    
-        let c_index = index
-        intermediate_derivative += (eval(trained_w_and_b.weights[node_index][c_index] * scaling_function_derivative(trained_w_and_b.weights[node_index][c_index] * L0_inputs[c_index] + L1_biases[node_index]) *2*(first_results[node_index] - real_values[node_index])))
-
-    })
-
-    L1_inputs_derivative.push(intermediate_derivative/trained_w_and_b.weights[node_index].length)
-
-})
-
-console.log("L1_inputs_derivatives: ")
-console.log(L1_inputs_derivative)
+console.log(trained_w_and_b_L1_L2)
