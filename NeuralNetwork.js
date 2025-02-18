@@ -45,7 +45,7 @@ const L3_weights = [
 const weights_layers = [L1_weights, L2_weights, L3_weights]
 const biases_layers = [L1_biases, L2_biases, L3_biases]
 
-const eta = 0.2
+const eta = 0.1
 const e = 2.718281828459045235360287471352
 
 function scaling_function(x) {
@@ -144,20 +144,6 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
         function layers_iterator(cost_function, L_index) {
 
             if (L_index >= 0) {
-
-                //console.log("cost function",cost_function)
-                biases_layers[L_index].forEach((placeholder, index) => {
-
-                    let N_index = index
-                    let intermediate_derivative = 0
-
-                    weights_layers[L_index][N_index].forEach((placeholder, index) => {
-        
-                        let C_index = index
-                        intermediate_derivative += eval(scaling_function_derivative(weights_layers[L_index][N_index][C_index] * results[L_index + 1][N_index] + biases_layers[L_index][N_index])*cost_function[N_index])
-                    })
-                    biases_derivatives_layers[L_index][N_index] = (intermediate_derivative/weights_layers[L_index][N_index].length)
-                })
     
                 weights_layers[L_index].forEach((placeholder, index) => {
     
@@ -166,29 +152,33 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
                     weights_layers[L_index][N_index].forEach((placeholder, index) => {
         
                         let C_index = index
-                        weights_derivatives_layers[L_index][N_index][C_index] = (results[L_index + 1][N_index]  *  scaling_function_derivative(weights_layers[L_index][N_index][C_index] * results[L_index + 1][N_index] + biases_layers[L_index][N_index]) * cost_function[N_index])
+                        weights_derivatives_layers[L_index][N_index][C_index] = (cost_function[N_index]*results[L_index][C_index])
                         //console.log(L_index," ",N_index," ",C_index)
-                        //console.log(results[L_index + 1][N_index], weights_layers[L_index][N_index][C_index], biases_layers[L_index][N_index], cost_function[N_index])
-
                     })
+                })
+
+                weights_layers[L_index][0].forEach((placeholder, index) => {
+
+                    let N_index = index
+                    biases_derivatives_layers[L_index][N_index] = cost_function[N_index]
+
                 })
 
                 let new_cost_function = []
 
                 weights_layers[L_index][0].forEach((placeholder, index) => {
 
-                    let intermediate_derivative = 0
+                    let weights_x_erros_sum = 0
                     let C_index = index
                     new_cost_function.push([])
 
                     weights_layers[L_index].forEach((placeholder, index) => {
                     
                         let N_index = index 
-                        intermediate_derivative += (eval(weights_layers[L_index][N_index][C_index] * scaling_function_derivative(weights_layers[L_index][N_index][C_index] * results[L_index + 1][N_index] + biases_layers[L_index][N_index]) * cost_function[N_index]))
+                        weights_x_erros_sum += (weights_layers[L_index][N_index][C_index] * cost_function[N_index])
                         //console.log(L_index," ",N_index," ",C_index, "\n",)
                     })
-                    new_cost_function[C_index] = (intermediate_derivative/weights_layers[L_index][0].length)
-                    //console.log(new_cost_function[C_index])
+                    new_cost_function[C_index] = (weights_x_erros_sum * scaling_function_derivative(results[L_index][C_index]))
                 })
                 
                 layers_iterator(new_cost_function, L_index - 1)
@@ -225,14 +215,12 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
 
         })
         return(every_layer_neural_training(new_weights_layers, new_biases_layer, inputs, target_values, iterations - 1))
-
     }   
 
     else {
         results.weights = weights_layers
         results.biases = biases_layers
     }
-
 }
 
 let results = {
