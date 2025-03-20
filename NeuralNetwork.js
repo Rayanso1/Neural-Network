@@ -7,9 +7,9 @@ function synthetic_data(amount, size) {
     
         for(let i = size; i > 0; i += -1) {
     
-            let nbr = (2*Math.random() - 1)
+            let nbr = uniform_distribution()
             inputs_array.push(nbr)
-            outputs_array.push(nbr/2)
+            outputs_array.push(Math.max(output_function(nbr)))
         }
         synthetic_inputs.push(inputs_array)
         synthetic_outputs.push(outputs_array)
@@ -27,14 +27,21 @@ function w_and_b_arrays(layers_lengths) {
             weights_layers.push([])
             biases_layers.push([])
 
+            weights_template_array.push([])
+            biases_template_array.push([])
+
             for(let i = 0; i < layers_lengths[L_index]; i++) {
 
                 weights_layers[L_index - 1].push([])
                 biases_layers[L_index - 1].push(0)
 
+                weights_template_array[L_index - 1].push([])
+                biases_template_array[L_index - 1].push(null)
+
                 for(let j = 0; j < layers_lengths[L_index - 1]; j++) {
 
-                    weights_layers[L_index - 1][i].push((2*Math.random() - 1) * Math.sqrt(6 / layers_lengths[L_index - 1]))
+                    weights_layers[L_index - 1][i].push(uniform_distribution() * Math.sqrt(6 / layers_lengths[L_index - 1]))
+                    weights_template_array[L_index - 1][i].push(null)
                 }
             }
             return(xavier_initialization(L_index + 1))
@@ -45,37 +52,38 @@ function w_and_b_arrays(layers_lengths) {
 
 function scaling_function(x) {
 
-    return((e**x - e**-x)/(e**x + e**-x))
+    return(Math.max(x,0))
 
 }
 
 function scaling_function_derivative(x) {
 
-    return(1 - scaling_function(x)**2)
+    if (x>0) {return(1)} else {return(0.001)}
 
 }
 
-function single_node_calculator(weights, bias_index, biases, inputs, n=0, base_sum=0) {
+async function single_node_calculator(weights, bias, inputs) {
 
-    if (n < weights.length) {
+    let results = await Promise.all(weights.map(async (weight, index) => {weight * inputs[index]}))
 
-        let intermetiate_sum = base_sum + (weights[n]*inputs[n])
-
-        return(single_node_calculator(weights, bias_index, biases, inputs, n+1, intermetiate_sum))
-    }
-
-    return(scaling_function(base_sum + biases[bias_index]))
+    return(scaling_function(results.reduce((accumulator, currentValue) => {accumulator + currentValue}, 0) + bias))
 
 }
 
+const min = 0
+const max = 1
+function uniform_distribution() {return((max-min)*Math.random()-min)}
+function output_function(x) {return(x/2)}
 const eta = 0.01
 const e = 2.718281828459045235360287471352
 const input_size = 1
 const output_size = 1
-const layers_lengths = [input_size, 50, output_size]
-const nbr_iterations = 1_000_000
+const layers_lengths = [input_size, 5, 5, output_size]
+const nbr_iterations = 1
 const data_amount = nbr_iterations + 1
 
+let weights_template_array = []
+let biases_template_array = []
 let weights_layers = []
 let biases_layers = []
 
@@ -94,66 +102,36 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
 
         let results = [inputs]
 
-        weights_layers.map((weights_arrays, index) => {
+        weights_layers.forEach((weights_arrays, index) => {
 
             let L_index = index
             let layer_results = []
             let previous_results = results[results.length - 1]
 
-            weights_arrays.map((weights_values, index) => {
+            weights_arrays.forEach((weights_values, index) => {
 
-                layer_results.push(single_node_calculator(weights_values, index, biases_layers[L_index], previous_results))
+                layer_results.push(single_node_calculator(weights_values, biases_layers[L_index][index], previous_results))
 
             })
             results.push(layer_results)
         })
 
-        if (Number.isInteger(Math.log10((nbr_iterations - iterations))) ) {
+        if (Number.isInteger(Math.log2((nbr_iterations - iterations))) ) {
             console.log("iterations: ",nbr_iterations-iterations,"\n")
             console.log("inputs: ",inputs)
             console.log("results: ",results[results.length - 1])
             console.log("target_values: ",target_values)
             let errors_sum = 0
             results[results.length - 1].forEach((result, index) => {errors_sum += Math.abs(result - target_values[index])})
-            all_errors.push(errors_sum * 10+"%")
-            console.log("error: ",errors_sum * 10+"%","\n")
+            all_errors.push((errors_sum * 100)/(output_size*(max-min))+"%")
+            console.log("error: ",(errors_sum * 100)/(output_size*(max-min))+"%","\n")
         }
 
         let cost_function = []
         results[results.length - 1].forEach((result, index) => cost_function.push(2 * (results[results.length - 1][index] - target_values[index])))
 
-        let new_weights_layers =  []
-        let new_biases_layers = []
-
-        weights_layers.forEach((layer, index) => {
-
-            let L_index = index
-            new_weights_layers[L_index] = []
-
-            layer.forEach((weights, index) => {
-
-                let N_index = index
-                new_weights_layers[L_index][N_index] = []
-
-                weights.forEach((placeholder, index) => {
-
-                    let C_index = index
-                    new_weights_layers[L_index][N_index][C_index] = []
-                })
-            })
-        })
-
-        biases_layers.forEach((layer, index) => {
-
-            let L_index = index
-            new_biases_layers[L_index] = []
-
-            layer.forEach((placeholder, index) => {
-
-                let N_index = index
-                new_biases_layers[L_index][N_index] = []
-            }) 
-        })
+        let new_weights_layers =  weights_template_array
+        let new_biases_layers = biases_template_array
 
         function layers_iterator(cost_function, L_index) {
 
