@@ -1,13 +1,14 @@
+"use strict";
+
 function synthetic_data(amount, size) {
 
     if (amount > 0) {
-
         let inputs_array = []
         let outputs_array = []
     
         for(let i = size; i > 0; i += -1) {
     
-            let nbr = (2*Math.random() - 1)
+            let nbr = (Math.random())
             inputs_array.push(nbr)
             outputs_array.push(nbr/2)
         }
@@ -51,11 +52,11 @@ function scaling_function(x) {
 
 function scaling_function_derivative(x) {
 
-    if (x>=-1) {
+    if (x >= 0) {
         return(1)
     }
 
-    else return(-0.001)
+    else return(0)
 
 
 }
@@ -73,11 +74,12 @@ function single_node_calculator(weights, bias_index, biases, inputs, n=0, base_s
 
 }
 
-const eta = 0.01
+const fs = require("fs")
+const eta = 0.001
 const e = 2.718281828459045235360287471352
 const input_size = 1
 const output_size = 1
-const layers_lengths = [input_size,5, output_size]
+const layers_lengths = [input_size, output_size]
 const nbr_iterations = 1_000_000
 const data_amount = nbr_iterations + 1
 
@@ -113,15 +115,16 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
             results.push(layer_results)
         })
 
+        let errors_sum = 0
+        results[results.length - 1].forEach((result, index) => {errors_sum += Math.abs(result - target_values[index])})
+        all_errors.push(errors_sum)
+
         if (Number.isInteger(Math.log10((nbr_iterations - iterations))) ) {
             console.log("iterations: ",nbr_iterations-iterations,"\n")
             console.log("inputs: ",inputs)
             console.log("results: ",results[results.length - 1])
             console.log("target_values: ",target_values)
-            let errors_sum = 0
-            results[results.length - 1].forEach((result, index) => {errors_sum += Math.abs(result - target_values[index])})
-            all_errors.push(errors_sum * 10+"%")
-            console.log("error: ",errors_sum * 10+"%","\n")
+            console.log("error: ",errors_sum,"\n")
         }
 
         let cost_function = []
@@ -221,4 +224,6 @@ every_layer_neural_training(weights_layers, biases_layers, synthetic_inputs[nbr_
 console.timeEnd()
 
 console.log(results)
-console.log(all_errors)
+
+let JSON_array = JSON.stringify(all_errors, null, 2)
+fs.writeFileSync("output.json",JSON_array,"utf8",)
