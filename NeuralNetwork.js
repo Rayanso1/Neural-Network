@@ -1,5 +1,11 @@
 "use strict";
 
+function uniform_distribution() {
+
+    return(Math.random()*(max-min) + min)
+
+}
+
 function synthetic_data(amount, size) {
 
     if (amount > 0) {
@@ -8,7 +14,7 @@ function synthetic_data(amount, size) {
     
         for(let i = size; i > 0; i += -1) {
     
-            let nbr = (Math.random())
+            let nbr = (uniform_distribution())
             inputs_array.push(nbr)
             outputs_array.push(nbr/2)
         }
@@ -35,7 +41,7 @@ function w_and_b_arrays(layers_lengths) {
 
                 for(let j = 0; j < layers_lengths[L_index - 1]; j++) {
 
-                    weights_layers[L_index - 1][i].push((2*Math.random() - 1) * Math.sqrt(6 / layers_lengths[L_index - 1]))
+                    weights_layers[L_index - 1][i].push((uniform_distribution()) * Math.sqrt(6 / layers_lengths[L_index - 1]))
                 }
             }
             return(xavier_initialization(L_index + 1))
@@ -46,13 +52,13 @@ function w_and_b_arrays(layers_lengths) {
 
 function scaling_function(x) {
 
-    return(Math.max(x,-1))
+    return(Math.max(x,min))
 
 }
 
 function scaling_function_derivative(x) {
 
-    if (x >= 0) {
+    if (x >= min) {
         return(1)
     }
 
@@ -61,25 +67,28 @@ function scaling_function_derivative(x) {
 
 }
 
-function single_node_calculator(weights, bias_index, biases, inputs, n=0, base_sum=0) {
+function single_node_calculator(weights, bias_index, biases, inputs, condition, n=0, base_sum=0,) {
 
     if (n < weights.length) {
 
         let intermetiate_sum = base_sum + (weights[n]*inputs[n])
 
-        return(single_node_calculator(weights, bias_index, biases, inputs, n+1, intermetiate_sum))
+        return(single_node_calculator(weights, bias_index, biases, inputs, condition, n+1, intermetiate_sum))
     }
-
+    if (condition = -1) {
+        unscaled_final_results.push(base_sum + biases[bias_index])
+    }
     return(scaling_function(base_sum + biases[bias_index]))
 
 }
 
+const max = 1
+const min = -1
 const fs = require("fs")
-const eta = 0.001
-const e = 2.718281828459045235360287471352
+const eta = 0.01
 const input_size = 1
 const output_size = 1
-const layers_lengths = [input_size, output_size]
+const layers_lengths = [input_size,5,5, output_size]
 const nbr_iterations = 1_000_000
 const data_amount = nbr_iterations + 1
 
@@ -88,6 +97,8 @@ let biases_layers = []
 
 w_and_b_arrays(layers_lengths)
 
+console.log(weights_layers)
+
 let synthetic_inputs = []
 let synthetic_outputs = []
 
@@ -95,21 +106,25 @@ synthetic_data(data_amount, input_size)
 
 let all_errors = []
 
+var unscaled_final_results = []
+
 function every_layer_neural_training(weights_layers, biases_layers, inputs, target_values, iterations) {
 
     if (iterations > 0) {
 
         let results = [inputs]
 
-        weights_layers.map((weights_arrays, index) => {
+        unscaled_final_results = []
+
+        weights_layers.forEach((weights_arrays, index) => {
 
             let L_index = index
             let layer_results = []
             let previous_results = results[results.length - 1]
 
-            weights_arrays.map((weights_values, index) => {
+            weights_arrays.forEach((weights_values, index) => {
 
-                layer_results.push(single_node_calculator(weights_values, index, biases_layers[L_index], previous_results))
+                layer_results.push(single_node_calculator(weights_values, index, biases_layers[L_index], previous_results, L_index - weights_layers.length))
 
             })
             results.push(layer_results)
@@ -128,7 +143,7 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
         }
 
         let cost_function = []
-        results[results.length - 1].forEach((result, index) => cost_function.push(2 * (results[results.length - 1][index] - target_values[index])))
+        results[results.length - 1].forEach((result, index) => cost_function.push(2*(results[results.length - 1][index] - target_values[index]) * scaling_function_derivative(unscaled_final_results[index])))
 
         let new_weights_layers =  []
         let new_biases_layers = []
