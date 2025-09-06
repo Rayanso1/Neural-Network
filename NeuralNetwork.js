@@ -9,15 +9,14 @@ function uniform_distribution() {
 function synthetic_data(amount, size) {
 
     if (amount > 0) {
-        let inputs_array = []
-        let outputs_array = []
     
-        for(let i = size; i > 0; i += -1) {
-    
-            let nbr = (uniform_distribution())
-            inputs_array.push(nbr)
-            outputs_array.push(nbr/2)
-        }
+        let a = uniform_distribution()
+
+        let x = [a]
+
+        let inputs_array = x
+        let outputs_array = [(a**2) + 1]
+
         synthetic_inputs.push(inputs_array)
         synthetic_outputs.push(outputs_array)
 
@@ -52,19 +51,14 @@ function w_and_b_arrays(layers_lengths) {
 
 function scaling_function(x) {
 
-    return(Math.max(x,min))
+    return(Math.max(0,x))
 
 }
 
 function scaling_function_derivative(x) {
 
-    if (x >= min) {
-        return(1)
-    }
-
-    else return(0)
-
-
+    if (x >= 0) {return 1}
+    else {return(0)}
 }
 
 function single_node_calculator(weights, bias_index, biases, inputs, condition, n=0, base_sum=0,) {
@@ -83,17 +77,19 @@ function single_node_calculator(weights, bias_index, biases, inputs, condition, 
 }
 
 const max = 1
-const min = -1
+const min = 0
 const fs = require("fs")
 const eta = 0.01
 const input_size = 1
 const output_size = 1
-const layers_lengths = [input_size,5,5, output_size]
-const nbr_iterations = 1_000_000
+const layers_lengths = [input_size,5, output_size]
+const nbr_iterations = 10_000_000
 const data_amount = nbr_iterations + 1
+const data_frequency = 1000
+const batch_size = 10
 
-let weights_layers = []
-let biases_layers = []
+var weights_layers = []
+var biases_layers = []
 
 w_and_b_arrays(layers_lengths)
 
@@ -108,9 +104,74 @@ let all_errors = []
 
 var unscaled_final_results = []
 
-function every_layer_neural_training(weights_layers, biases_layers, inputs, target_values, iterations) {
+var weights_batch =  []
+var biases_batch = []
+
+weights_layers.forEach((layer, index) => {
+
+    let L_index = index
+    weights_batch[L_index] = []
+
+    layer.forEach((weights, index) => {
+
+        let N_index = index
+        weights_batch[L_index][N_index] = []
+
+        weights.forEach((placeholder, index) => {
+
+            let C_index = index
+            weights_batch[L_index][N_index][C_index] = 0
+        })
+    })
+})
+
+biases_layers.forEach((layer, index) => {
+
+    let L_index = index
+    biases_batch[L_index] = []
+
+    layer.forEach((placeholder, index) => {
+
+        let N_index = index
+        biases_batch[L_index][N_index] = 0
+    }) 
+})
+
+function every_layer_neural_training(inputs, target_values, iterations) {
 
     if (iterations > 0) {
+
+        if ((nbr_iterations - iterations + 1) % batch_size == 0) {
+
+            weights_layers.forEach((layer, index) => {
+
+                let L_index = index
+
+                layer.forEach((weights, index) => {
+
+                    let N_index = index
+
+                    weights.forEach((placeholder, index) => {
+
+                        let C_index = index
+                        weights_layers[L_index][N_index][C_index] += -(eta * weights_batch[L_index][N_index][C_index])
+                        weights_batch[L_index][N_index][C_index] = 0
+                    })
+                })
+            })
+
+            biases_layers.forEach((layer, index) => {
+
+                let L_index = index
+
+                layer.forEach((placeholder, index) => {
+
+                    let N_index = index
+                    biases_layers[L_index][N_index] += -(eta * biases_batch[L_index][N_index])
+                    biases_batch[L_index][N_index] = 0
+                }) 
+            })
+        }
 
         let results = [inputs]
 
@@ -132,7 +193,7 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
 
         let errors_sum = 0
         results[results.length - 1].forEach((result, index) => {errors_sum += Math.abs(result - target_values[index])})
-        all_errors.push(errors_sum)
+        if ((iterations % data_frequency) == 0) {all_errors.push(errors_sum)}
 
         if (Number.isInteger(Math.log10((nbr_iterations - iterations))) ) {
             console.log("iterations: ",nbr_iterations-iterations,"\n")
@@ -143,40 +204,12 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
         }
 
         let cost_function = []
-        results[results.length - 1].forEach((result, index) => cost_function.push(2*(results[results.length - 1][index] - target_values[index]) * scaling_function_derivative(unscaled_final_results[index])))
 
-        let new_weights_layers =  []
-        let new_biases_layers = []
-
-        weights_layers.forEach((layer, index) => {
-
-            let L_index = index
-            new_weights_layers[L_index] = []
-
-            layer.forEach((weights, index) => {
-
-                let N_index = index
-                new_weights_layers[L_index][N_index] = []
-
-                weights.forEach((placeholder, index) => {
-
-                    let C_index = index
-                    new_weights_layers[L_index][N_index][C_index] = []
-                })
-            })
-        })
-
-        biases_layers.forEach((layer, index) => {
-
-            let L_index = index
-            new_biases_layers[L_index] = []
-
-            layer.forEach((placeholder, index) => {
-
-                let N_index = index
-                new_biases_layers[L_index][N_index] = []
-            }) 
-        })
+        results[results.length - 1].forEach((result, index) => {
+            
+            cost_function.push(2*(results[results.length - 1][index] - target_values[index]) * scaling_function_derivative(unscaled_final_results[index]))
+        }
+        )
 
         function layers_iterator(cost_function, L_index) {
 
@@ -189,15 +222,15 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
                     weights_layers[L_index][N_index].forEach((placeholder, index) => {
         
                         let C_index = index
-                        new_weights_layers[L_index][N_index][C_index] = weights_layers[L_index][N_index][C_index] - (eta * cost_function[N_index] * results[L_index][C_index])
+                        weights_batch[L_index][N_index][C_index] += (cost_function[N_index] * results[L_index][C_index])
                     })
                 })
 
                 weights_layers[L_index].forEach((placeholder, index) => {
 
                     let N_index = index
-                    new_biases_layers[L_index][N_index] = biases_layers[L_index][N_index] - (eta * cost_function[N_index])
-
+                    biases_batch[L_index][N_index] += (cost_function[N_index])
+                    
                 })
 
                 let new_cost_function = []
@@ -220,7 +253,8 @@ function every_layer_neural_training(weights_layers, biases_layers, inputs, targ
             }
         }
         layers_iterator(cost_function, weights_layers.length - 1)
-        return(every_layer_neural_training(new_weights_layers, new_biases_layers, synthetic_inputs[iterations - 1], synthetic_outputs[iterations - 1], iterations - 1))
+
+        return(every_layer_neural_training(synthetic_inputs[iterations - 1], synthetic_outputs[iterations - 1], iterations - 1))
     }   
 
     else {
@@ -235,7 +269,7 @@ let results = {
 }
 
 console.time()
-every_layer_neural_training(weights_layers, biases_layers, synthetic_inputs[nbr_iterations], synthetic_outputs[nbr_iterations], nbr_iterations)
+every_layer_neural_training(synthetic_inputs[nbr_iterations], synthetic_outputs[nbr_iterations], nbr_iterations)
 console.timeEnd()
 
 console.log(results)
