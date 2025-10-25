@@ -34,7 +34,7 @@ function synthetic_data(amount) {
 
 function w_and_b_arrays(layers_lengths) {
 
-    function xavier_initialization(L_index) {
+    function initialization(L_index) {
 
         if (layers_lengths.length > L_index) {
 
@@ -48,13 +48,15 @@ function w_and_b_arrays(layers_lengths) {
 
                 for(let j = 0; j < layers_lengths[L_index - 1]; j++) {
 
-                    weights_layers[L_index - 1][i].push((uniform_distribution(min, max)) * Math.sqrt(6 / layers_lengths[L_index - 1]))
+                    if (activation_functions[L_index - 1] == ReLu) {weights_layers[L_index - 1][i][j] = (normal_distribution(0,Math.sqrt(2/(layers_lengths[L_index - 1]))))}
+                    if (activation_functions[L_index - 1] == tanh) {weights_layers[L_index - 1][i][j] = (normal_distribution(0,Math.sqrt(2/(layers_lengths[L_index - 1] + layers_lengths[L_index]))))}
+                    if (activation_functions[L_index - 1] == sigmoid) {weights_layers[L_index - 1][i][j] = (normal_distribution(0,2/(layers_lengths[L_index - 1])))}
                 }
             }
-            return(xavier_initialization(L_index + 1))
+            return(initialization(L_index + 1))
         }
     }
-    xavier_initialization(1)
+    initialization(1)
 }
 
 
@@ -76,35 +78,38 @@ function single_node_calculator(L_index, weights, bias_index, biases, inputs, co
 const max = 1
 const min = 0
 const fs = require("fs")
-const eta = 0.001
+const learning_rate = 0.001
 const input_size = 28*28
 const output_size = 10
 const layers_lengths = [input_size, 256, 256, output_size]
-const nbr_iterations = 500_000
+
+const activation_functions = [ReLu, ReLu, sigmoid]
+const activation_functions_derivatives = [ReLu_dx, ReLu_dx, sigmoid_dx]
+
+const nbr_iterations = 100_000
 const data_amount = 60_000
-const data_frequency = 50
-const batch_size = 50
+const data_frequency = 1
+const batch_size = 20
 const beta_1 = 0.9
 const beta_2 = 0.999
-const path = ''
+const eta = 10**-8
 
-function loss_function(x,y) {return((x-y)**2)} //x: computed value, y: target value
-function loss_function_derivative(x,y) {return(2*(x-y))}
+const path = "" //path to the MNIST dataset
+
+function loss_function(x,y) {} 
+function loss_function_derivative(x,y) {return(2*(x-y))} //x: computed value, y: target value
 
 function ReLu(x) {return(Math.max(0,x))}
-function sigmoid(x) {return(1 / ( 1 + ( (Math.E)**(-x))))}
+function sigmoid(x) {return(1/(1+(Math.E**(-x))))}
 function ReLu_dx(x) {if (x<0) {return(0)} else {return(1)}}
 function sigmoid_dx(x) {return(sigmoid(x) * (1 - sigmoid(x)))}
 function tanh(x) {return(Math.tanh(x))}
 function tanh_dx(x) {return(1/(Math.cosh(x)**2))}
 
 
-const activation_functions = [tanh, tanh, tanh, sigmoid]
-const activation_functions_derivatives = [tanh_dx, tanh_dx, tanh_dx, sigmoid_dx]
+const use_synthetic_data = 0 //0 to use MNIST dataset //1 to use datasets from functions
 
-const use_synthetic_data = 0 //0 to use already existing dataset //1 to use datasets from functions
-
-function function_to_approximate(x) {return((1/2)*Math.sin(6*x)+(1/10 * Math.sin(150*x)))}
+function function_to_approximate(x) {return(Math.sin(5*x))}
 
 var weights_layers = []
 var biases_layers = []
@@ -174,23 +179,47 @@ let all_results_targets = []
 
 var unscaled_final_results = []
 
-var weights_batch =  []
-var biases_batch = []
+var weights_derivatives_batch =  []
+var biases_derivatives_batch = []
+
+var weights_derivatives_momentum = []
+var biases_derivatives_momentum = []
+
+var EWA_weights = []
+var EWA_biases = []
+
+var bias_correction_momentum_weights = []
+var bias_correction_momentum_biases = []
+
+var bias_correction_EWA_weights = []
+var bias_correction_EWA_biases = []
 
 weights_layers.forEach((layer, index) => {
 
     let L_index = index
-    weights_batch[L_index] = []
+    weights_derivatives_batch[L_index] = []
+    weights_derivatives_momentum[L_index] = []
+    EWA_weights[L_index] = []
+    bias_correction_momentum_weights[L_index] = []
+    bias_correction_EWA_weights[L_index] = []
 
     layer.forEach((weights, index) => {
 
         let N_index = index
-        weights_batch[L_index][N_index] = []
+        weights_derivatives_batch[L_index][N_index] = []
+        weights_derivatives_momentum[L_index][N_index] = []
+        EWA_weights[L_index][N_index] = []
+        bias_correction_momentum_weights[L_index][N_index] = []
+        bias_correction_EWA_weights[L_index][N_index] = []
 
         weights.forEach((placeholder, index) => {
 
             let C_index = index
-            weights_batch[L_index][N_index][C_index] = 0
+            weights_derivatives_batch[L_index][N_index][C_index] = 0
+            weights_derivatives_momentum[L_index][N_index][C_index] = 0
+            EWA_weights[L_index][N_index][C_index] = 0
+            bias_correction_momentum_weights[L_index][N_index][C_index] = 0
+            bias_correction_EWA_weights[L_index][N_index][C_index] = 0
         })
     })
 })
@@ -198,12 +227,20 @@ weights_layers.forEach((layer, index) => {
 biases_layers.forEach((layer, index) => {
 
     let L_index = index
-    biases_batch[L_index] = []
+    biases_derivatives_batch[L_index] = []
+    biases_derivatives_momentum[L_index] = []
+    EWA_biases[L_index] = []
+    bias_correction_momentum_biases[L_index] = []
+    bias_correction_EWA_biases[L_index] = []
 
     layer.forEach((placeholder, index) => {
 
         let N_index = index
-        biases_batch[L_index][N_index] = 0
+        biases_derivatives_batch[L_index][N_index] = 0
+        biases_derivatives_momentum[L_index][N_index] = 0
+        EWA_biases[L_index][N_index] = 0
+        bias_correction_momentum_biases[L_index][N_index] = 0
+        bias_correction_EWA_biases[L_index][N_index] = 0
     }) 
 })
 
@@ -224,8 +261,14 @@ function every_layer_neural_training(inputs, target_values, iterations) {
                      weights.forEach((placeholder, index) => {
 
                         let C_index = index
-                        weights_layers[L_index][N_index][C_index] += -(eta * weights_batch[L_index][N_index][C_index])
-                        weights_batch[L_index][N_index][C_index] = 0
+
+                        weights_derivatives_momentum[L_index][N_index][C_index] = (beta_1 * weights_derivatives_momentum[L_index][N_index][C_index] + (1 - beta_1)*(weights_derivatives_batch[L_index][N_index][C_index]/batch_size))
+                        EWA_weights[L_index][N_index][C_index] = (beta_2 * EWA_weights[L_index][N_index][C_index] + (1 - beta_2)*((weights_derivatives_batch[L_index][N_index][C_index]/batch_size)**2))
+                        bias_correction_momentum_weights[L_index][N_index][C_index] = weights_derivatives_momentum[L_index][N_index][C_index]/(1-beta_1)
+                        bias_correction_EWA_weights[L_index][N_index][C_index] = EWA_weights[L_index][N_index][C_index]/(1-beta_2)
+
+                        weights_layers[L_index][N_index][C_index] += -(learning_rate * bias_correction_momentum_weights[L_index][N_index][C_index]/Math.sqrt(bias_correction_EWA_weights[L_index][N_index][C_index] + eta))
+                        weights_derivatives_batch[L_index][N_index][C_index] = 0
                     })
                 })
             })
@@ -237,8 +280,14 @@ function every_layer_neural_training(inputs, target_values, iterations) {
                 layer.forEach((placeholder, index) => {
 
                     let N_index = index
-                    biases_layers[L_index][N_index] += -(eta * biases_batch[L_index][N_index])
-                    biases_batch[L_index][N_index] = 0
+
+                    biases_derivatives_momentum[L_index][N_index] = (beta_1 * biases_derivatives_momentum[L_index][N_index] + (1 - beta_1)*(biases_derivatives_batch[L_index][N_index]/batch_size))
+                    EWA_biases[L_index][N_index] = (beta_2 * EWA_biases[L_index][N_index] + (1 - beta_2)*((biases_derivatives_batch[L_index][N_index]/batch_size)**2))
+                    bias_correction_momentum_biases[L_index][N_index] = biases_derivatives_momentum[L_index][N_index]/(1-beta_1)
+                    bias_correction_EWA_biases[L_index][N_index] = EWA_biases[L_index][N_index]/(1-beta_2)
+
+                    biases_layers[L_index][N_index] += -(learning_rate * bias_correction_momentum_biases[L_index][N_index]/Math.sqrt(bias_correction_EWA_biases[L_index][N_index] + eta))
+                    biases_derivatives_batch[L_index][N_index] = 0
                 }) 
             })
         }
@@ -280,6 +329,7 @@ function every_layer_neural_training(inputs, target_values, iterations) {
         results[results.length - 1].forEach((result, index) => {
                 
             cost_function.push(loss_function_derivative(results[results.length - 1][index], target_values[index]) * activation_functions_derivatives[activation_functions_derivatives.length - 1](unscaled_final_results[index]))
+
         }
         )
 
@@ -294,15 +344,14 @@ function every_layer_neural_training(inputs, target_values, iterations) {
                      weights_layers[L_index][N_index].forEach((placeholder, index) => {
             
                         let C_index = index
-                        weights_batch[L_index][N_index][C_index] += (cost_function[N_index] * results[L_index][C_index])
+                        weights_derivatives_batch[L_index][N_index][C_index] += (cost_function[N_index] * results[L_index][C_index])
                     })
                 })
 
                 weights_layers[L_index].forEach((placeholder, index) => {
 
                     let N_index = index
-                    biases_batch[L_index][N_index] += (cost_function[N_index])
-                        
+                    biases_derivatives_batch[L_index][N_index] += (cost_function[N_index])
                 })
 
                 if (L_index > 0) {
@@ -320,6 +369,7 @@ function every_layer_neural_training(inputs, target_values, iterations) {
                         let N_index = index 
                         weights_x_erros_sum += (weights_layers[L_index][N_index][C_index] * cost_function[N_index])
                     })
+
                     new_cost_function[C_index] = weights_x_erros_sum  * activation_functions_derivatives[L_index - 1](results[L_index][C_index])
                 })
 
